@@ -11,7 +11,12 @@ const Notification = require('../models/Notification');
 // 🚀 In-memory cache to eliminate duplicate requests & multi-tab hammering
 // Cache key: `emp_${employeeId}` -> { timestamp, data }
 const summaryCache = new Map();
-const CACHE_TTL_MS = 15000; // 15 seconds cache TTL
+const CACHE_TTL_MS = 8000; // 8 seconds cache TTL
+
+const clearSummaryCache = (employeeId) => {
+  if (employeeId) summaryCache.delete(employeeId);
+  else summaryCache.clear();
+};
 
 // Helper to get IST date string
 const getTodayIST = () => {
@@ -36,27 +41,30 @@ router.get('/employee-summary/:employeeId', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Employee ID required' });
   }
 
-  // 1. Check in-memory cache first
-  const cached = summaryCache.get(employeeId);
-  if (cached && (now - cached.timestamp < CACHE_TTL_MS)) {
-    return res.status(200).json({ 
-      success: true, 
-      data: cached.data, 
-      cached: true 
-    });
+  // 1. Check in-memory cache first (unless refresh explicitly requested)
+  if (!req.query.refresh) {
+    const cached = summaryCache.get(employeeId);
+    if (cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+      return res.status(200).json({ 
+        success: true, 
+        data: cached.data, 
+        cached: true 
+      });
+    }
   }
 
   try {
     const todayStr = getTodayIST();
 
     // 2. Query targeted data in parallel with sensible limits
+    // Note: Expenses must NOT have a limit, because wallet balance is an all-time ledger calculation
     const [user, myLogs, tasks, myLeaves, bookings, expenses, notifications] = await Promise.all([
       User.findById(employeeId).select('-password').lean(),
       Attendance.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(10).lean(),
       Task.find({ assignedTo: employeeId }).sort({ createdAt: -1 }).limit(30).lean(),
       Leave.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(20).lean(),
       Booking.find({ teacherId: employeeId, status: 'Pending' }).sort({ requestedAt: -1 }).limit(20).lean(),
-      Expense.find({ employeeId }).sort({ date: -1, createdAt: -1 }).limit(30).lean(),
+      Expense.find({ employeeId }).sort({ date: -1, createdAt: -1 }).lean(),
       Notification.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(10).lean()
     ]);
 
@@ -107,4 +115,5 @@ router.get('/employee-summary/:employeeId', async (req, res) => {
   }
 });
 
+router.clearSummaryCache = clearSummaryCache;
 module.exports = router;

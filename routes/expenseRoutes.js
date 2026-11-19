@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Expense = require('../models/Expense');
+const dashboardRoutes = require('./dashboardRoutes');
 
 // GET: Fetch expenses for a specific employee
 router.get('/employee/:employeeId', async (req, res) => {
@@ -45,6 +46,7 @@ router.post('/', async (req, res) => {
         });
 
         const savedExpense = await newExpense.save();
+        if (dashboardRoutes.clearSummaryCache) dashboardRoutes.clearSummaryCache(employeeId);
         res.status(201).json({ success: true, data: savedExpense });
     } catch (err) {
         console.error("POST Expense Error:", err);
@@ -62,6 +64,7 @@ router.delete('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: "Expense not found!" });
         }
 
+        if (dashboardRoutes.clearSummaryCache) dashboardRoutes.clearSummaryCache(deletedExpense.employeeId);
         res.json({ success: true, message: "Expense deleted successfully!" });
     } catch (err) {
         console.error("DELETE Expense Error:", err);
@@ -79,6 +82,7 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: "Expense not found!" });
         }
 
+        if (dashboardRoutes.clearSummaryCache) dashboardRoutes.clearSummaryCache(updatedExpense.employeeId);
         res.json({ success: true, data: updatedExpense });
     } catch (err) {
         console.error("PUT Expense Error:", err);
