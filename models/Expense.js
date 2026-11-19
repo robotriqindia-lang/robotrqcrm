@@ -31,6 +31,14 @@ const expenseSchema = new mongoose.Schema({
         type: String,
         enum: ['Expense', 'Allocation'],
         default: 'Expense'
+    },
+    category: {
+        type: String,
+        default: 'General'
+    },
+    paymentMode: {
+        type: String,
+        default: 'Cash'
     }
 }, { timestamps: true });
 

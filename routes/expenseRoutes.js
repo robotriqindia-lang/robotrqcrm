@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
 
 // POST: Submit a new employee expense (Employee Dashboard) or Allocation (Admin)
 router.post('/', async (req, res) => {
-    const { employeeId, employeeName, date, description, amount, type } = req.body;
+    const { employeeId, employeeName, date, description, amount, type, category, paymentMode } = req.body;
     
     if (!employeeId || !employeeName || !date || !description || !amount) {
         return res.status(400).json({ success: false, message: "All fields are required!" });
@@ -39,7 +39,9 @@ router.post('/', async (req, res) => {
             date,
             description,
             amount: Number(amount),
-            type: type || 'Expense'
+            type: type || 'Expense',
+            category: category || 'General',
+            paymentMode: paymentMode || 'Cash'
         });
 
         const savedExpense = await newExpense.save();
