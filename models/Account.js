@@ -17,6 +17,11 @@ const accountSchema = new mongoose.Schema({
     amount: { 
         type: Number, 
         required: true 
+    },
+    status: {
+        type: String,
+        default: 'Pending',
+        enum: ['Pending', 'Paid']
     }
 }, { timestamps: true });
 

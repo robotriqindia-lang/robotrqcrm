@@ -23,4 +23,24 @@ router.get('/:userId', async (req, res) => {
     }
 });
 
+// 3. Mark notification as read
+router.put('/read/:id', async (req, res) => {
+    try {
+        await Notification.findByIdAndUpdate(req.params.id, { read: true });
+        res.status(200).json({ success: true, message: "Marked as read" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Error updating notification" });
+    }
+});
+
+// 4. Delete a notification
+router.delete('/:id', async (req, res) => {
+    try {
+        await Notification.findByIdAndDelete(req.params.id);
+        res.status(200).json({ success: true, message: "Notification deleted" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Error deleting notification" });
+    }
+});
+
 module.exports = router;

@@ -36,9 +36,12 @@ router.get('/:id', async (req, res) => {
 // ==========================================
 router.post('/', async (req, res) => {
     try {
-        // 🚀 Basic Validation (தேவைப்பட்டால் மாத்திக்கோங்க)
-        if (!req.body.name || !req.body.mobile || !req.body.course) {
-            return res.status(400).json({ success: false, message: "Name, Mobile, and Course are required fields." });
+        // 🚀 Basic Validation: 'managedBy' கண்டிப்பா வரணும்னு செக் பண்றோம் 🚀
+        if (!req.body.name || !req.body.mobile || !req.body.course || !req.body.managedBy) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Name, Mobile, Course, and Managed By are required fields." 
+            });
         }
 
         const newLead = new Lead(req.body);
@@ -46,7 +49,6 @@ router.post('/', async (req, res) => {
         res.status(201).json({ success: true, data: savedLead, message: "Lead created successfully!" });
     } catch (err) {
         console.error("Error creating lead:", err);
-        // 🚀 Mongoose Validation Error-ஆ இருந்தா 400 அனுப்புவோம்
         if (err.name === 'ValidationError') {
              return res.status(400).json({ success: false, message: "Validation Error", error: err.message });
         }

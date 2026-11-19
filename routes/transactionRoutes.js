@@ -52,4 +52,18 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+// ✅ 4. அப்டேட் பண்ண (PUT: /api/accounts/:id)
+router.put('/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const updatedEntry = await Account.findByIdAndUpdate(id, req.body, { new: true });
+        if (!updatedEntry) {
+            return res.status(404).json({ success: false, message: "Record not found!" });
+        }
+        res.json({ success: true, data: updatedEntry });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Server error while updating!" });
+    }
+});
+
 module.exports = router;

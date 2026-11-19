@@ -1,0 +1,6 @@
+<USER_REQUEST>
+ipo na anupirukka pdf la 1643 items ooda name , category, purchase price, sale price. ithu mattum irukku enaku add panni thaniya?
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-08-08T12:18:36+05:30.
+</ADDITIONAL_METADATA>

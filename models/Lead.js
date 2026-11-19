@@ -19,8 +19,14 @@ const leadSchema = new mongoose.Schema({
     followUpAction: { type: String, default: "Pending" },
     advancePayment: { type: String, default: "Set Value" },
     dealClosed: { type: String, default: "No" },
-    // 🚀 மிக முக்கியம்: இந்த வரியை கவனியுங்கள்!
-    priority: { type: String, default: "Medium" } 
+    priority: { type: String, default: "Medium" },
+    
+    // 🚀 புதுசா ஆட் பண்ண 'managedBy' ஃபீல்டு 🚀
+    managedBy: { type: String, default: "" },
+    
+    // Source field to differentiate Meta vs Cold leads
+    source: { type: String, default: 'Meta Leads' }
+    
 }, { timestamps: true });
 
 module.exports = mongoose.model('Lead', leadSchema);

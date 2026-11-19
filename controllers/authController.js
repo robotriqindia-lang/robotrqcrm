@@ -8,12 +8,20 @@ const mongoose = require('mongoose');
 exports.register = async (req, res) => {
     const { 
         email, password, role, 
-        fullName, dob, course, studentId, courseJoiningDate, courseEndDate, fees,
+        fullName, dob, course, studentId, orderId, address, paidAmount, 
+        joiningDate, endingDate, courseJoiningDate, courseEndDate, 
+        fees, level, collegeOrCompany, preferredType,
         designation, aadharNumber, dateOfJoining, bankName, accNumber, ifscCode,
-        salary, perDaySalary 
+        salary, perDaySalary, empId, panNumber
     } = req.body; 
 
     try {
+        // Handle photo upload
+        let photoUrl = req.body.photo || null;
+        if (req.file) {
+            photoUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        }
+
         // மின்னஞ்சல் ஏற்கனவே உள்ளதா எனச் சரிபார்க்கவும்
         let user = await User.findOne({ email: email.trim().toLowerCase() });
         if (user) return res.status(400).json({ success: false, message: "User ID/Email already exists!" });
@@ -24,25 +32,46 @@ exports.register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(finalPassword, salt);
 
         // ரோல் லாஜிக் (Manager designation இருந்தால் தானாகவே manager role செட் ஆகும்)
-        let finalRole = role; 
+        let finalRole = role || req.body.empRole; 
         if (designation && designation.toLowerCase().trim() === 'manager') {
             finalRole = 'manager';
         }
         if (!finalRole) {
-            finalRole = 'student'; 
+            finalRole = (empId || designation || aadharNumber || bankName) ? 'employee' : 'student'; 
         }
 
-        // சம்பளம் (Salary) கால்குலேஷன்
-        const finalSalary = salary || perDaySalary || 0;
+        // சம்பளம் & தேதிகள் கால்குலேஷன்
+        const finalSalary = Number(salary || perDaySalary || 0);
+        const finalJoiningDate = joiningDate || dateOfJoining || courseJoiningDate || "";
+        const finalEndDate = endingDate || courseEndDate || "";
 
         // புதிய பயனர் உருவாக்கம்
         user = new User({ 
             email: email.trim().toLowerCase(), 
             password: hashedPassword,
             role: finalRole, 
-            fullName, dob, course, studentId, courseJoiningDate, courseEndDate, fees,
-            designation, aadharNumber, dateOfJoining, bankName, accNumber, ifscCode,
-            salary: finalSalary 
+            fullName, dob, course, studentId, orderId, address, 
+            paidAmount: paidAmount ? Number(paidAmount) : 0, 
+            joiningDate: finalJoiningDate,
+            endingDate: finalEndDate,
+            courseJoiningDate: finalJoiningDate, 
+            courseEndDate: finalEndDate, 
+            fees,
+            level,
+            collegeOrCompany,
+            preferredType,
+            photo: photoUrl,
+            profileImage: photoUrl,
+            empId,
+            designation, 
+            panNumber, 
+            aadharNumber, 
+            dateOfJoining: finalJoiningDate, 
+            bankName, 
+            accNumber, 
+            ifscCode,
+            salary: finalSalary,
+            perDaySalary: finalSalary 
         });
 
         await user.save();
@@ -65,6 +94,7 @@ exports.register = async (req, res) => {
 
 // 📌 2. LOGIN: Email / Student ID / Employee ID என எதை வைத்தும் லாகின் செய்யலாம் 🚀
 exports.login = async (req, res) => {
+    console.log("LOGIN REQUEST BODY:", req.body);
     const { email, userId, password } = req.body;
     
     try {
@@ -172,6 +202,35 @@ exports.updateUser = async (req, res) => {
 
         if (req.body.perDaySalary !== undefined) {
             req.body.salary = req.body.perDaySalary;
+        }
+
+        if (req.file) {
+            const photoUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+            req.body.photo = photoUrl;
+            req.body.profileImage = photoUrl;
+        }
+
+        if (req.body.joiningDate) {
+            req.body.courseJoiningDate = req.body.joiningDate;
+            req.body.dateOfJoining = req.body.joiningDate;
+        }
+        if (req.body.dateOfJoining) {
+            req.body.joiningDate = req.body.dateOfJoining;
+        }
+        if (req.body.endingDate && !req.body.courseEndDate) {
+            req.body.courseEndDate = req.body.endingDate;
+        }
+        if (req.body.courseJoiningDate && !req.body.joiningDate) {
+            req.body.joiningDate = req.body.courseJoiningDate;
+        }
+        if (req.body.courseEndDate && !req.body.endingDate) {
+            req.body.endingDate = req.body.courseEndDate;
+        }
+        if (req.body.salary !== undefined) {
+            req.body.perDaySalary = Number(req.body.salary);
+        }
+        if (req.body.perDaySalary !== undefined && req.body.salary === undefined) {
+            req.body.salary = Number(req.body.perDaySalary);
         }
 
         const updatedUser = await User.findOneAndUpdate(query, req.body, { returnDocument: 'after' }).select('-password');
