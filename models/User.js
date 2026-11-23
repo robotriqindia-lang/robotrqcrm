@@ -78,7 +78,8 @@ const userSchema = new mongoose.Schema({
         salesBom: { type: Boolean, default: false },
         salesQuotation: { type: Boolean, default: false },
         salesExpenses: { type: Boolean, default: false },
-        salesAccounts: { type: Boolean, default: false }
+        salesAccounts: { type: Boolean, default: false },
+        salesService: { type: Boolean, default: false }
     }
 
 }, { timestamps: true });
