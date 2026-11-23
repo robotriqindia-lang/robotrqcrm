@@ -6,7 +6,12 @@ const dashboardRoutes = require('./dashboardRoutes');
 // GET: Fetch expenses for a specific employee
 router.get('/employee/:employeeId', async (req, res) => {
     try {
-        const expenses = await Expense.find({ employeeId: req.params.employeeId }).sort({ date: -1, createdAt: -1 });
+        const query = Expense.find({ employeeId: req.params.employeeId }).sort({ date: -1, createdAt: -1 });
+        if (req.query.limit !== 'all' && req.query.limit !== '0') {
+            const lim = parseInt(req.query.limit) || 30;
+            query.limit(lim);
+        }
+        const expenses = await query;
         res.json({ success: true, data: expenses });
     } catch (err) {
         console.error("GET Employee Expense Error:", err);

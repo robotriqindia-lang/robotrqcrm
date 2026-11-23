@@ -57,14 +57,14 @@ router.get('/employee-summary/:employeeId', async (req, res) => {
     const todayStr = getTodayIST();
 
     // 2. Query targeted data in parallel with sensible limits
-    // Note: Expenses must NOT have a limit, because wallet balance is an all-time ledger calculation
+    // Active current ledger: latest 30 transactions for responsive display & correct active cycle wallet
     const [user, myLogs, tasks, myLeaves, bookings, expenses, notifications] = await Promise.all([
       User.findById(employeeId).select('-password').lean(),
       Attendance.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(10).lean(),
       Task.find({ assignedTo: employeeId }).sort({ createdAt: -1 }).limit(30).lean(),
       Leave.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(20).lean(),
       Booking.find({ teacherId: employeeId, status: 'Pending' }).sort({ requestedAt: -1 }).limit(20).lean(),
-      Expense.find({ employeeId }).sort({ date: -1, createdAt: -1 }).lean(),
+      Expense.find({ employeeId }).sort({ date: -1, createdAt: -1 }).limit(30).lean(),
       Notification.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(10).lean()
     ]);
 
