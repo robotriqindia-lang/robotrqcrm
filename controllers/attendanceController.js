@@ -72,6 +72,7 @@ exports.checkIn = async (req, res) => {
         const userId = (req.user && (req.user._id || req.user.id)) || req.body.userId;
         const fullName = (req.user && req.user.fullName) || req.body.userName || "Student User";
         const userRole = (req.user && req.user.role) || req.body.role || "student";
+        const { locationType, locationName, customerId, serviceId, locationDetails, coordinates, latitude, longitude, mapUrl } = req.body;
 
         if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({ success: false, message: "A valid User ID is required!" });
@@ -87,13 +88,25 @@ exports.checkIn = async (req, res) => {
             return res.status(400).json({ success: false, message: "Already checked in today!" });
         }
 
+        const resolvedCoords = coordinates || (latitude && longitude ? `${latitude}, ${longitude}` : '');
+        const resolvedMapUrl = mapUrl || (resolvedCoords ? `https://www.google.com/maps?q=${encodeURIComponent(resolvedCoords.replace(/\s+/g, ''))}` : '');
+
         const newAttendance = new Attendance({
             userId: new mongoose.Types.ObjectId(userId),
             userName: fullName,
             role: userRole.toLowerCase(),
             date: dateStr,
             checkIn: timeStr,
-            status: "In Office" 
+            status: "In Office",
+            locationType: locationType || 'office',
+            locationName: locationName || 'Main Office',
+            customerId: customerId || null,
+            serviceId: serviceId || null,
+            locationDetails: locationDetails || '',
+            coordinates: resolvedCoords,
+            latitude: latitude || (resolvedCoords ? parseFloat(resolvedCoords.split(',')[0]) : null),
+            longitude: longitude || (resolvedCoords ? parseFloat(resolvedCoords.split(',')[1]) : null),
+            mapUrl: resolvedMapUrl
         });
 
         await newAttendance.save();
@@ -109,7 +122,7 @@ exports.checkIn = async (req, res) => {
 exports.checkOut = async (req, res) => {
     try {
         const userId = (req.user && (req.user._id || req.user.id)) || req.body.userId;
-        const { workSummary, taskSummary } = req.body; 
+        const { workSummary, taskSummary, coordinates, latitude, longitude, mapUrl } = req.body; 
         const { dateStr, timeStr, totalMinutes: outMins } = getIST();
         const cutoffMins = 24 * 60; 
 
@@ -134,15 +147,27 @@ exports.checkOut = async (req, res) => {
 
         const finalSummary = workSummary || taskSummary || "Session Completed";
 
+        const resolvedOutCoords = coordinates || (latitude && longitude ? `${latitude}, ${longitude}` : '');
+        const resolvedOutMapUrl = mapUrl || (resolvedOutCoords ? `https://www.google.com/maps?q=${encodeURIComponent(resolvedOutCoords.replace(/\s+/g, ''))}` : '');
+
+        const updateData = {
+            checkOut: timeStr,
+            duration: durationText,
+            status: finalStatus, 
+            workSummary: finalSummary
+        };
+
+        if (resolvedOutCoords) {
+            updateData.checkOutCoordinates = resolvedOutCoords;
+            updateData.checkOutLatitude = latitude || parseFloat(resolvedOutCoords.split(',')[0]) || null;
+            updateData.checkOutLongitude = longitude || parseFloat(resolvedOutCoords.split(',')[1]) || null;
+            updateData.checkOutMapUrl = resolvedOutMapUrl;
+        }
+
         const updatedRecord = await Attendance.findByIdAndUpdate(
             attendance._id,
             {
-                $set: {
-                    checkOut: timeStr,
-                    duration: durationText,
-                    status: finalStatus, 
-                    workSummary: finalSummary
-                }
+                $set: updateData
             },
             { new: true }
         );

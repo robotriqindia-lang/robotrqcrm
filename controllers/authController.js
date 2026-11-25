@@ -142,7 +142,8 @@ exports.login = async (req, res) => {
                 studentId: user.studentId,
                 empId: user.empId,
                 designation: user.designation || (user.role === 'admin' ? 'Administrator' : 'Staff'),
-                course: user.course || 'N/A'
+                course: user.course || 'N/A',
+                dashboardPermissions: user.dashboardPermissions || {}
             } 
         });
     } catch (error) {

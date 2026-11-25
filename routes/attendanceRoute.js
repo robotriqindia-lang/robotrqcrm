@@ -96,16 +96,27 @@ router.get('/history/:userId', async (req, res) => {
 });
 
 // ===============================
-// 3. CHECK-IN
+// 3. CHECK-IN (With Place: Office, Customer, Service, Other)
 // ===============================
 router.post('/check-in', async (req, res) => {
   try {
-    const { userId } = req.body;
+    const { 
+      userId, 
+      locationType = 'office', 
+      locationName = 'Main Office', 
+      customerId = null, 
+      serviceId = null, 
+      locationDetails = '' 
+    } = req.body;
     const user = await User.findById(userId);
     const { dateIST: today, timeIST: nowTime } = getIST();
 
     const activeLog = await Attendance.findOne({ userId, date: today, checkOut: { $in: [null, ""] } });
     if (activeLog) return res.status(400).json({ success: false, message: "Already Checked-In!" });
+
+    // Validate ObjectIds if passed
+    const safeCustomerId = customerId && mongoose.Types.ObjectId.isValid(customerId) ? customerId : null;
+    const safeServiceId = serviceId && mongoose.Types.ObjectId.isValid(serviceId) ? serviceId : null;
 
     const newLog = new Attendance({
       userId,
@@ -113,13 +124,25 @@ router.post('/check-in', async (req, res) => {
       role: user?.role || "employee",
       date: today,
       checkIn: nowTime,
-      status: 'In Office'
+      status: 'In Office',
+      locationType,
+      locationName: locationName || 'Main Office',
+      customerId: safeCustomerId,
+      serviceId: safeServiceId,
+      locationDetails: locationDetails || ''
     });
 
     await newLog.save();
-    res.status(200).json({ success: true, message: "Check-In Successful!", time: nowTime });
+    res.status(200).json({ 
+      success: true, 
+      message: `Checked-In Successfully at ${locationName || 'Office'}!`, 
+      time: nowTime,
+      locationType,
+      locationName: locationName || 'Main Office'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server Error' });
+    console.error("Check-in error:", error);
+    res.status(500).json({ success: false, message: error.message || 'Server Error' });
   }
 });
 

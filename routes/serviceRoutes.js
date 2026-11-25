@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const ServiceReport = require('../models/ServiceReport');
+const SalesLead = require('../models/SalesLead');
+const Customer = require('../models/Customer');
 
 // Helper to auto-generate next Report No: MP/TSR/YYYY/001
 const generateNextReportNo = async () => {
     const year = new Date().getFullYear();
     const prefix = `MP/TSR/${year}/`;
     
-    // Find highest report number for current year
     const latest = await ServiceReport.findOne({ reportNo: new RegExp(`^${prefix}`) })
         .sort({ reportNo: -1 })
         .lean();
@@ -27,35 +29,204 @@ const generateNextReportNo = async () => {
     return `${prefix}${String(nextNum).padStart(3, '0')}`;
 };
 
-// GET: Summary Statistics
+// Helper to auto-generate next Enquiry ID: ENQ-XXX
+const generateNextEnquiryId = async () => {
+    const lastLead = await SalesLead.findOne({}, { enquiryId: 1 }).sort({ enquiryId: -1 });
+    let nextIdNumber = 1;
+    if (lastLead && lastLead.enquiryId && lastLead.enquiryId.startsWith('ENQ-')) {
+        const lastIdNum = parseInt(lastLead.enquiryId.split('-')[1]);
+        if (!isNaN(lastIdNum)) {
+            nextIdNumber = lastIdNum + 1;
+        }
+    } else {
+        const count = await SalesLead.countDocuments();
+        nextIdNumber = count + 1;
+    }
+    return `ENQ-${nextIdNumber.toString().padStart(3, '0')}`;
+};
+
+// Helper to evaluate if status represents a completed state
+const isCompletedStatus = (statusStr) => {
+    if (!statusStr) return false;
+    const s = statusStr.toLowerCase().trim();
+    return s === 'completed' || s === 'work completed' || s === 'sale created' || s === 'full payment received' || s === 'delivered' || s === 'closed';
+};
+
+// Helper to evaluate if status represents Work in Progress / In Progress
+const isInProgressStatus = (statusStr) => {
+    if (!statusStr) return false;
+    const s = statusStr.toLowerCase().trim();
+    return s === 'in progress' || s === 'work in progress' || s === 'work in process' || s === 'in process' || s === 'wip';
+};
+
+// Core Helper: Aggregate & unify Service & Project Enquiries with ServiceReports
+const getUnifiedServices = async () => {
+    // 1. Fetch all SalesLeads of type 'service' or 'project'
+    const leads = await SalesLead.find({ 
+        type: { $in: ['service', 'project'] } 
+    }).populate('assignedEmployee customer').lean();
+
+    // 2. Fetch all ServiceReports
+    const reports = await ServiceReport.find()
+        .populate('assignedTo customerId')
+        .lean();
+
+    // Index reports by leadId, enquiryId, and customer+machine
+    const reportByLeadId = {};
+    const reportByEnquiryId = {};
+    const matchedReportIds = new Set();
+
+    reports.forEach(r => {
+        if (r.leadId) reportByLeadId[r.leadId.toString()] = r;
+        if (r.enquiryId) reportByEnquiryId[r.enquiryId.trim().toUpperCase()] = r;
+    });
+
+    const unified = [];
+
+    // Merge Leads into Unified items
+    leads.forEach(lead => {
+        const leadIdStr = lead._id.toString();
+        const enqIdUpper = (lead.enquiryId || '').trim().toUpperCase();
+
+        const report = reportByLeadId[leadIdStr] || reportByEnquiryId[enqIdUpper] || null;
+        if (report) {
+            matchedReportIds.add(report._id.toString());
+        }
+
+        const rawStatus = report?.status || lead.status || 'New';
+        const isCompleted = isCompletedStatus(rawStatus);
+        const isInProgress = isInProgressStatus(rawStatus);
+        const resolvedCategory = isCompleted ? 'completed' : (isInProgress ? 'active' : 'pending');
+        const displayStatus = rawStatus;
+
+        unified.push({
+            _id: report?._id || lead._id,
+            leadId: lead._id,
+            reportId: report?._id || null,
+            enquiryId: lead.enquiryId || '',
+            workType: lead.type || (report?.workType || 'service'),
+            customer: lead.companyName || lead.customerName || (typeof lead.customer === 'object' ? lead.customer?.companyName || lead.customer?.customerName : '') || report?.customer || 'Customer',
+            customerName: lead.customerName || (typeof lead.customer === 'object' ? lead.customer?.customerName : '') || '',
+            companyName: lead.companyName || (typeof lead.customer === 'object' ? lead.customer?.companyName : '') || '',
+            customerId: (typeof lead.customer === 'object' ? lead.customer?._id : lead.customer) || report?.customerId?._id || report?.customerId || null,
+            phone: lead.phone || (typeof lead.customer === 'object' ? lead.customer?.phone : '') || '',
+            email: lead.email || (typeof lead.customer === 'object' ? lead.customer?.email : '') || '',
+            machineName: report?.machineName || lead.application || '',
+            equipmentServiced: report?.equipmentServiced || lead.application || '',
+            projectScope: report?.projectScope || lead.application || '',
+            locationAddress: report?.locationAddress || (typeof lead.customer === 'object' ? lead.customer?.address : '') || '',
+            enquiryDetails: lead.enquiryDetails || '',
+            engineerName: report?.engineerName || lead.assignedEmployee?.fullName || '',
+            assignedTo: report?.assignedTo?._id || report?.assignedTo || lead.assignedEmployee?._id || lead.assignedEmployee || null,
+            priority: lead.priority || report?.priority || 'Medium',
+            dateOfService: report?.dateOfService || (lead.enquiryDate ? new Date(lead.enquiryDate).toISOString().split('T')[0] : ''),
+            status: displayStatus,
+            category: resolvedCategory,
+            hasReport: Boolean(report),
+            reportNo: report?.reportNo || '',
+            workAuthNo: report?.workAuthNo || '',
+            totalServiceHours: report?.totalServiceHours || '0',
+            travelLogs: report?.travelLogs || [],
+            serviceLogs: report?.serviceLogs || [],
+            serviceTypes: report?.serviceTypes || {},
+            plcDetails: report?.plcDetails || '',
+            hmiDetails: report?.hmiDetails || '',
+            typeOfServicePerformed: report?.typeOfServicePerformed || '',
+            partsRepairedOrReplaced: report?.partsRepairedOrReplaced || '',
+            additionalServicePerformed: report?.additionalServicePerformed || '',
+            rootCauseRecommendations: report?.rootCauseRecommendations || '',
+            customerComments: report?.customerComments || '',
+            minePowerRep: report?.minePowerRep || null,
+            customerRep: report?.customerRep || null,
+            reportData: report || null,
+            createdAt: lead.createdAt || report?.createdAt || new Date()
+        });
+    });
+
+    // Also include any standalone ServiceReports that weren't linked to a SalesLead
+    reports.forEach(report => {
+        if (!matchedReportIds.has(report._id.toString())) {
+            const rawStatus = report.status || 'Work in Progress';
+            const isCompleted = isCompletedStatus(rawStatus);
+            const isInProgress = isInProgressStatus(rawStatus);
+            const resolvedCategory = isCompleted ? 'completed' : (isInProgress ? 'active' : 'pending');
+            const fallbackEnquiryId = report.enquiryId || `ENQ-SRV-${report.reportNo.split('/').pop() || '001'}`;
+
+            unified.push({
+                _id: report._id,
+                leadId: null,
+                reportId: report._id,
+                enquiryId: fallbackEnquiryId,
+                workType: report.workType || 'service',
+                customer: report.customer || 'Customer',
+                customerName: report.customer || '',
+                companyName: (typeof report.customerId === 'object' ? report.customerId?.companyName : '') || report.customer || '',
+                customerId: report.customerId?._id || report.customerId || null,
+                phone: (typeof report.customerId === 'object' ? report.customerId?.phone : '') || '',
+                email: (typeof report.customerId === 'object' ? report.customerId?.email : '') || '',
+                machineName: report.machineName || report.equipmentServiced || '',
+                equipmentServiced: report.equipmentServiced || report.machineName || '',
+                projectScope: report.projectScope || '',
+                locationAddress: report.locationAddress || '',
+                enquiryDetails: report.typeOfServicePerformed || '',
+                engineerName: report.engineerName || (typeof report.assignedTo === 'object' ? report.assignedTo?.fullName : '') || '',
+                assignedTo: report.assignedTo?._id || report.assignedTo || null,
+                priority: report.priority || 'Medium',
+                dateOfService: report.dateOfService || '',
+                status: rawStatus,
+                category: resolvedCategory,
+                hasReport: true,
+                reportNo: report.reportNo,
+                workAuthNo: report.workAuthNo || '',
+                totalServiceHours: report.totalServiceHours || '0',
+                travelLogs: report.travelLogs || [],
+                serviceLogs: report.serviceLogs || [],
+                serviceTypes: report.serviceTypes || {},
+                plcDetails: report.plcDetails || '',
+                hmiDetails: report.hmiDetails || '',
+                typeOfServicePerformed: report.typeOfServicePerformed || '',
+                partsRepairedOrReplaced: report.partsRepairedOrReplaced || '',
+                additionalServicePerformed: report.additionalServicePerformed || '',
+                rootCauseRecommendations: report.rootCauseRecommendations || '',
+                customerComments: report.customerComments || '',
+                minePowerRep: report.minePowerRep || null,
+                customerRep: report.customerRep || null,
+                reportData: report,
+                createdAt: report.createdAt || new Date()
+            });
+        }
+    });
+
+    // Sort by createdAt / date descending
+    unified.sort((a, b) => new Date(b.createdAt || b.dateOfService || 0) - new Date(a.createdAt || a.dateOfService || 0));
+
+    return unified;
+};
+
+// GET: Summary Statistics (Active, Completed, Services, Projects, Hours)
 router.get('/stats', async (req, res) => {
     try {
-        const [total, completed, inProgress, pending] = await Promise.all([
-            ServiceReport.countDocuments(),
-            ServiceReport.countDocuments({ status: 'Completed' }),
-            ServiceReport.countDocuments({ status: 'In Progress' }),
-            ServiceReport.countDocuments({ status: 'Pending' })
-        ]);
-
-        const allReports = await ServiceReport.find({}, 'serviceLogs totalServiceHours').lean();
+        const unified = await getUnifiedServices();
+        
         let totalHours = 0;
-        allReports.forEach(r => {
-            if (r.totalServiceHours) {
-                totalHours += parseFloat(r.totalServiceHours) || 0;
-            } else if (Array.isArray(r.serviceLogs)) {
-                r.serviceLogs.forEach(l => {
-                    totalHours += parseFloat(l.total) || 0;
-                });
-            }
+        unified.forEach(item => {
+            totalHours += parseFloat(item.totalServiceHours) || 0;
         });
+
+        const activeCount = unified.filter(i => isInProgressStatus(i.status)).length;
+        const completedCount = unified.filter(i => isCompletedStatus(i.status)).length;
+        const servicesCount = unified.filter(i => i.workType === 'service').length;
+        const projectsCount = unified.filter(i => i.workType === 'project').length;
 
         res.json({
             success: true,
             data: {
-                total,
-                completed,
-                inProgress,
-                pending,
+                total: unified.length,
+                active: activeCount,
+                inProgress: activeCount,
+                completed: completedCount,
+                services: servicesCount,
+                projects: projectsCount,
                 totalHours: Math.round(totalHours * 10) / 10
             }
         });
@@ -65,50 +236,171 @@ router.get('/stats', async (req, res) => {
     }
 });
 
-// GET: Fetch all service reports (Supports search & filters)
+// GET: Fetch all services and projects (supports category=active|completed|all, workType=service|project, search, engineerId)
 router.get('/', async (req, res) => {
     try {
-        const { search, status, engineerId, dateFrom, dateTo } = req.query;
-        let query = {};
+        const { search, status, category, workType, engineerId, dateFrom, dateTo } = req.query;
+        let list = await getUnifiedServices();
 
+        // 1. Filter by Category (active vs completed)
+        if (category && category !== 'all') {
+            if (category === 'active') {
+                list = list.filter(i => isInProgressStatus(i.status));
+            } else if (category === 'completed') {
+                list = list.filter(i => isCompletedStatus(i.status));
+            } else {
+                list = list.filter(i => i.category === category);
+            }
+        }
+
+        // 2. Filter by Work Type (service vs project)
+        if (workType && workType !== 'all') {
+            list = list.filter(i => (i.workType || '').toLowerCase() === workType.toLowerCase());
+        }
+
+        // 3. Filter by Specific Status
         if (status && status !== 'all') {
-            query.status = status;
+            list = list.filter(i => (i.status || '').toLowerCase() === status.toLowerCase());
         }
 
-        if (engineerId) {
-            query.$or = [
-                { assignedTo: engineerId },
-                { 'minePowerRep.name': new RegExp(engineerId, 'i') },
-                { engineerName: new RegExp(engineerId, 'i') }
-            ];
+        // 4. Filter by Engineer
+        if (engineerId && engineerId !== 'all') {
+            list = list.filter(i => {
+                const assignedMatch = i.assignedTo && String(i.assignedTo) === String(engineerId);
+                const nameMatch = i.engineerName && i.engineerName.toLowerCase().includes(engineerId.toLowerCase());
+                return assignedMatch || nameMatch;
+            });
         }
 
-        if (search) {
-            const regex = new RegExp(search.trim(), 'i');
-            query.$or = [
-                { reportNo: regex },
-                { workAuthNo: regex },
-                { customer: regex },
-                { machineName: regex },
-                { engineerName: regex },
-                { equipmentServiced: regex },
-                { locationAddress: regex }
-            ];
+        // 5. Search Filter
+        if (search && search.trim()) {
+            const q = search.trim().toLowerCase();
+            list = list.filter(i => 
+                (i.enquiryId || '').toLowerCase().includes(q) ||
+                (i.reportNo || '').toLowerCase().includes(q) ||
+                (i.workAuthNo || '').toLowerCase().includes(q) ||
+                (i.customer || '').toLowerCase().includes(q) ||
+                (i.companyName || '').toLowerCase().includes(q) ||
+                (i.customerName || '').toLowerCase().includes(q) ||
+                (i.machineName || '').toLowerCase().includes(q) ||
+                (i.equipmentServiced || '').toLowerCase().includes(q) ||
+                (i.projectScope || '').toLowerCase().includes(q) ||
+                (i.engineerName || '').toLowerCase().includes(q) ||
+                (i.locationAddress || '').toLowerCase().includes(q)
+            );
         }
 
+        // 6. Date Range Filter
         if (dateFrom || dateTo) {
-            query.dateOfService = {};
-            if (dateFrom) query.dateOfService.$gte = dateFrom;
-            if (dateTo) query.dateOfService.$lte = dateTo;
+            list = list.filter(i => {
+                const d = i.dateOfService;
+                if (!d) return true;
+                if (dateFrom && d < dateFrom) return false;
+                if (dateTo && d > dateTo) return false;
+                return true;
+            });
         }
 
-        const reports = await ServiceReport.find(query)
-            .sort({ dateOfService: -1, createdAt: -1 })
-            .lean();
-
-        res.json({ success: true, count: reports.length, data: reports });
+        res.json({ success: true, count: list.length, data: list });
     } catch (err) {
         console.error("GET Service Reports Error:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// GET: Customer's complete Service & Project History
+router.get('/customer/:customerId', async (req, res) => {
+    try {
+        const { customerId } = req.params;
+        const allServices = await getUnifiedServices();
+        
+        let customerObj = null;
+        if (mongoose.Types.ObjectId.isValid(customerId)) {
+            customerObj = await Customer.findById(customerId).lean();
+        }
+
+        const filtered = allServices.filter(item => {
+            if (item.customerId && String(item.customerId) === String(customerId)) return true;
+            if (customerObj) {
+                const companyMatch = customerObj.companyName && item.customer && item.customer.toLowerCase().includes(customerObj.companyName.toLowerCase());
+                const nameMatch = customerObj.customerName && item.customerName && item.customerName.toLowerCase().includes(customerObj.customerName.toLowerCase());
+                if (companyMatch || nameMatch) return true;
+            }
+            return false;
+        });
+
+        res.json({ success: true, count: filtered.length, data: filtered });
+    } catch (err) {
+        console.error("GET Customer Service History Error:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// POST: Create New Service or Project (Anchor by Enquiry ID)
+router.post('/create-work', async (req, res) => {
+    try {
+        const {
+            workType = 'service', // 'service' or 'project'
+            customerName,
+            companyName,
+            customerId,
+            phone,
+            email,
+            machineName,
+            projectScope,
+            locationAddress,
+            enquiryDetails,
+            assignedEmployee,
+            engineerName,
+            priority = 'Medium',
+            targetDate,
+            status = 'Work in Progress'
+        } = req.body;
+
+        if (!customerName && !companyName) {
+            return res.status(400).json({ success: false, message: 'Customer or Company name is required' });
+        }
+
+        const nextEnqId = await generateNextEnquiryId();
+
+        // 1. Create SalesLead record as the master enquiry
+        const leadPayload = {
+            enquiryId: nextEnqId,
+            customer: customerId || null,
+            customerName: customerName || companyName || 'Customer',
+            companyName: companyName || customerName || '',
+            phone: phone || '',
+            email: email || '',
+            application: machineName || projectScope || (workType === 'project' ? 'Automation Project' : 'Technical Service'),
+            enquiryDetails: enquiryDetails || '',
+            type: workType,
+            assignedEmployee: assignedEmployee || null,
+            priority: priority,
+            status: status,
+            enquiryDate: new Date()
+        };
+
+        const newLead = await SalesLead.create(leadPayload);
+
+        res.status(201).json({
+            success: true,
+            message: `${workType === 'project' ? 'Project' : 'Service'} created successfully with ID ${nextEnqId}!`,
+            data: {
+                _id: newLead._id,
+                leadId: newLead._id,
+                enquiryId: nextEnqId,
+                workType,
+                customer: companyName || customerName,
+                customerName: customerName || companyName,
+                companyName: companyName || customerName,
+                customerId,
+                machineName: machineName || projectScope || '',
+                status,
+                hasReport: false
+            }
+        });
+    } catch (err) {
+        console.error("POST create-work Error:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 });
@@ -127,12 +419,16 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// POST: Create a new service report
+// POST: Create / Submit a new Technical Service Report (links to enquiryId & leadId)
 router.post('/', async (req, res) => {
     try {
         let {
             reportNo,
             workAuthNo,
+            enquiryId,
+            leadId,
+            workType,
+            projectScope,
             customer,
             customerId,
             locationAddress,
@@ -193,6 +489,10 @@ router.post('/', async (req, res) => {
         const newReport = new ServiceReport({
             reportNo: reportNo.trim(),
             workAuthNo: workAuthNo || '',
+            enquiryId: enquiryId || '',
+            leadId: leadId || null,
+            workType: workType || 'service',
+            projectScope: projectScope || '',
             customer: customer.trim(),
             customerId: customerId || null,
             locationAddress: locationAddress || '',
@@ -233,6 +533,14 @@ router.post('/', async (req, res) => {
         });
 
         const savedReport = await newReport.save();
+
+        // If linked to a lead, update the lead status to 'Work Completed'
+        if (leadId) {
+            await SalesLead.findByIdAndUpdate(leadId, { status: 'Work Completed' }).catch(() => {});
+        } else if (enquiryId) {
+            await SalesLead.findOneAndUpdate({ enquiryId }, { status: 'Work Completed' }).catch(() => {});
+        }
+
         res.status(201).json({ success: true, data: savedReport, message: 'Technical Service Report created successfully!' });
     } catch (err) {
         console.error("POST Service Report Error:", err);
@@ -264,9 +572,104 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Service Report not found' });
         }
 
+        // If status completed, update lead too
+        if (updatedReport.status === 'Completed' && (updatedReport.leadId || updatedReport.enquiryId)) {
+            if (updatedReport.leadId) {
+                await SalesLead.findByIdAndUpdate(updatedReport.leadId, { status: 'Work Completed' }).catch(() => {});
+            } else if (updatedReport.enquiryId) {
+                await SalesLead.findOneAndUpdate({ enquiryId: updatedReport.enquiryId }, { status: 'Work Completed' }).catch(() => {});
+            }
+        }
+
         res.json({ success: true, data: updatedReport, message: 'Technical Service Report updated successfully!' });
     } catch (err) {
         console.error("PUT Service Report Error:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// PATCH: Mark a service report as completed by employee
+router.patch('/:id/complete', async (req, res) => {
+    try {
+        const { 
+            typeOfServicePerformed, 
+            partsRepairedOrReplaced, 
+            additionalServicePerformed, 
+            rootCauseRecommendations, 
+            customerComments,
+            totalServiceHours,
+            completedBy
+        } = req.body;
+
+        const updateFields = {
+            status: 'Completed',
+            dateOfService: req.body.dateOfService || new Date().toISOString().split('T')[0]
+        };
+
+        if (typeOfServicePerformed) updateFields.typeOfServicePerformed = typeOfServicePerformed;
+        if (partsRepairedOrReplaced) updateFields.partsRepairedOrReplaced = partsRepairedOrReplaced;
+        if (additionalServicePerformed) updateFields.additionalServicePerformed = additionalServicePerformed;
+        if (rootCauseRecommendations) updateFields.rootCauseRecommendations = rootCauseRecommendations;
+        if (customerComments) updateFields.customerComments = customerComments;
+        if (totalServiceHours) updateFields.totalServiceHours = String(totalServiceHours);
+        if (completedBy) {
+            updateFields['minePowerRep.name'] = completedBy;
+            updateFields['minePowerRep.signedAt'] = new Date().toISOString();
+        }
+
+        const updated = await ServiceReport.findByIdAndUpdate(
+            req.params.id,
+            { $set: updateFields },
+            { new: true }
+        );
+
+        if (!updated) {
+            // Also check if id is a SalesLead id
+            if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+                await SalesLead.findByIdAndUpdate(req.params.id, { status: 'Work Completed' }).catch(() => {});
+            }
+            return res.status(404).json({ success: false, message: 'Service Report not found' });
+        }
+
+        if (updated.leadId) {
+            await SalesLead.findByIdAndUpdate(updated.leadId, { status: 'Work Completed' }).catch(() => {});
+        } else if (updated.enquiryId) {
+            await SalesLead.findOneAndUpdate({ enquiryId: updated.enquiryId }, { status: 'Work Completed' }).catch(() => {});
+        }
+
+        res.json({ success: true, data: updated, message: `Service Report ${updated.reportNo} marked as Completed!` });
+    } catch (err) {
+        console.error("PATCH Complete Service Error:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// PATCH: Update status of a work item / service / lead
+router.patch('/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!status) {
+            return res.status(400).json({ success: false, message: 'Status is required' });
+        }
+
+        const id = req.params.id;
+        let updated = null;
+
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            updated = await ServiceReport.findByIdAndUpdate(id, { status }, { new: true });
+        }
+
+        if (updated && updated.leadId) {
+            await SalesLead.findByIdAndUpdate(updated.leadId, { status }).catch(() => {});
+        } else if (updated && updated.enquiryId) {
+            await SalesLead.findOneAndUpdate({ enquiryId: updated.enquiryId }, { status }).catch(() => {});
+        } else if (mongoose.Types.ObjectId.isValid(id)) {
+            await SalesLead.findByIdAndUpdate(id, { status }).catch(() => {});
+        }
+
+        res.json({ success: true, message: `Status updated to ${status} successfully!` });
+    } catch (err) {
+        console.error("PATCH service status error:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 });

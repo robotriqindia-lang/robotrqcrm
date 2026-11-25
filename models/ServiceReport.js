@@ -3,6 +3,12 @@ const mongoose = require('mongoose');
 const serviceReportSchema = new mongoose.Schema({
     reportNo: { type: String, unique: true, required: true }, // e.g. MP/TSR/2026/001
     workAuthNo: { type: String, default: '' },
+    enquiryId: { type: String, default: '' }, // e.g. ENQ-030
+    leadId: { type: mongoose.Schema.Types.ObjectId, ref: 'SalesLead' },
+    workType: { type: String, enum: ['service', 'project'], default: 'service' },
+    projectScope: { type: String, default: '' },
+    priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
+    targetDate: { type: String, default: '' },
     
     // Customer & Machine Info
     customer: { type: String, required: true },

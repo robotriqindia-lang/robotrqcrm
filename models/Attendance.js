@@ -41,6 +41,61 @@ const AttendanceSchema = new mongoose.Schema({
     duration: {
         type: String,
         default: '0h 0m'
+    },
+    locationType: {
+        type: String,
+        enum: ['office', 'customer', 'service', 'other'],
+        default: 'office'
+    },
+    locationName: {
+        type: String,
+        default: 'Main Office'
+    },
+    customerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Customer',
+        default: null
+    },
+    serviceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ServiceReport',
+        default: null
+    },
+    locationDetails: {
+        type: String,
+        default: ''
+    },
+    coordinates: {
+        type: String,
+        default: ''
+    },
+    latitude: {
+        type: Number,
+        default: null
+    },
+    longitude: {
+        type: Number,
+        default: null
+    },
+    mapUrl: {
+        type: String,
+        default: ''
+    },
+    checkOutCoordinates: {
+        type: String,
+        default: ''
+    },
+    checkOutLatitude: {
+        type: Number,
+        default: null
+    },
+    checkOutLongitude: {
+        type: Number,
+        default: null
+    },
+    checkOutMapUrl: {
+        type: String,
+        default: ''
     }
 }, { timestamps: true });
 
