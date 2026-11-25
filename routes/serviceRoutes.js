@@ -48,15 +48,15 @@ const generateNextEnquiryId = async () => {
 // Helper to evaluate if status represents a completed state
 const isCompletedStatus = (statusStr) => {
     if (!statusStr) return false;
-    const s = statusStr.toLowerCase().trim();
-    return s === 'completed' || s === 'work completed' || s === 'sale created' || s === 'full payment received' || s === 'delivered' || s === 'closed';
+    const s = statusStr.toLowerCase().trim().replace(/[-_]/g, ' ');
+    return s === 'completed' || s === 'work completed' || s === 'sale created' || s === 'full payment received' || s === 'delivered' || s === 'closed' || s.includes('complet');
 };
 
 // Helper to evaluate if status represents Work in Progress / In Progress
 const isInProgressStatus = (statusStr) => {
     if (!statusStr) return false;
-    const s = statusStr.toLowerCase().trim();
-    return s === 'in progress' || s === 'work in progress' || s === 'work in process' || s === 'in process' || s === 'wip';
+    const s = statusStr.toLowerCase().trim().replace(/[-_]/g, ' ');
+    return s === 'in progress' || s === 'work in progress' || s === 'work in process' || s === 'in process' || s === 'wip' || s.includes('progress') || s.includes('process');
 };
 
 // Core Helper: Aggregate & unify Service & Project Enquiries with ServiceReports
@@ -657,17 +657,31 @@ router.patch('/:id/status', async (req, res) => {
 
         if (mongoose.Types.ObjectId.isValid(id)) {
             updated = await ServiceReport.findByIdAndUpdate(id, { status }, { new: true });
+            if (!updated) {
+                await SalesLead.findByIdAndUpdate(id, { status }).catch(() => {});
+            }
+        } else {
+            // Check if id is an enquiryId (e.g. ENQ-115) or reportNo
+            updated = await ServiceReport.findOneAndUpdate(
+                { $or: [{ enquiryId: id }, { reportNo: id }] },
+                { status },
+                { new: true }
+            );
+            await SalesLead.findOneAndUpdate({ enquiryId: id }, { status }).catch(() => {});
         }
 
         if (updated && updated.leadId) {
             await SalesLead.findByIdAndUpdate(updated.leadId, { status }).catch(() => {});
         } else if (updated && updated.enquiryId) {
             await SalesLead.findOneAndUpdate({ enquiryId: updated.enquiryId }, { status }).catch(() => {});
-        } else if (mongoose.Types.ObjectId.isValid(id)) {
-            await SalesLead.findByIdAndUpdate(id, { status }).catch(() => {});
         }
 
         res.json({ success: true, message: `Status updated to ${status} successfully!` });
+    } catch (err) {
+        console.error("PATCH service status error:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
     } catch (err) {
         console.error("PATCH service status error:", err);
         res.status(500).json({ success: false, message: err.message });

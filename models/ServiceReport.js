@@ -68,7 +68,6 @@ const serviceReportSchema = new mongoose.Schema({
     // Status
     status: { 
         type: String, 
-        enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'],
         default: 'Completed' 
     },
     
