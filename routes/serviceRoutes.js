@@ -682,11 +682,6 @@ router.patch('/:id/status', async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 });
-    } catch (err) {
-        console.error("PATCH service status error:", err);
-        res.status(500).json({ success: false, message: err.message });
-    }
-});
 
 // DELETE: Delete a service report
 router.delete('/:id', async (req, res) => {
