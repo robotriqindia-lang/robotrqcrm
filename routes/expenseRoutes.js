@@ -7,9 +7,9 @@ const dashboardRoutes = require('./dashboardRoutes');
 router.get('/employee/:employeeId', async (req, res) => {
     try {
         const query = Expense.find({ employeeId: req.params.employeeId }).sort({ date: -1, createdAt: -1 });
-        if (req.query.limit !== 'all' && req.query.limit !== '0') {
-            const lim = parseInt(req.query.limit) || 30;
-            query.limit(lim);
+        if (req.query.limit && req.query.limit !== 'all' && req.query.limit !== '0') {
+            const lim = parseInt(req.query.limit);
+            if (lim > 0) query.limit(lim);
         }
         const expenses = await query;
         res.json({ success: true, data: expenses });

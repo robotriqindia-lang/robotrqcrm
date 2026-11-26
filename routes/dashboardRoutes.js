@@ -64,7 +64,7 @@ router.get('/employee-summary/:employeeId', async (req, res) => {
       Task.find({ assignedTo: employeeId }).sort({ createdAt: -1 }).limit(30).lean(),
       Leave.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(20).lean(),
       Booking.find({ teacherId: employeeId, status: 'Pending' }).sort({ requestedAt: -1 }).limit(20).lean(),
-      Expense.find({ employeeId }).sort({ date: -1, createdAt: -1 }).limit(30).lean(),
+      Expense.find({ employeeId }).sort({ date: -1, createdAt: -1 }).lean(),
       Notification.find({ userId: employeeId }).sort({ createdAt: -1 }).limit(10).lean()
     ]);
 

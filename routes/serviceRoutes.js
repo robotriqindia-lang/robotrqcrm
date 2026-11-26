@@ -617,16 +617,34 @@ router.patch('/:id/complete', async (req, res) => {
             updateFields['minePowerRep.signedAt'] = new Date().toISOString();
         }
 
-        const updated = await ServiceReport.findByIdAndUpdate(
-            req.params.id,
-            { $set: updateFields },
-            { new: true }
-        );
+        let updated = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            updated = await ServiceReport.findByIdAndUpdate(
+                req.params.id,
+                { $set: updateFields },
+                { new: true }
+            );
+        }
 
         if (!updated) {
-            // Also check if id is a SalesLead id
+            updated = await ServiceReport.findOneAndUpdate(
+                { $or: [{ enquiryId: req.params.id }, { reportNo: req.params.id }, { leadId: req.params.id }] },
+                { $set: updateFields },
+                { new: true }
+            );
+        }
+
+        if (!updated) {
+            // Also check if id is a SalesLead id or enquiryId
+            let lead = null;
             if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-                await SalesLead.findByIdAndUpdate(req.params.id, { status: 'Work Completed' }).catch(() => {});
+                lead = await SalesLead.findByIdAndUpdate(req.params.id, { status: 'Work Completed' }, { new: true });
+            }
+            if (!lead) {
+                lead = await SalesLead.findOneAndUpdate({ enquiryId: req.params.id }, { status: 'Work Completed' }, { new: true });
+            }
+            if (lead) {
+                return res.json({ success: true, message: `Work ${lead.enquiryId || req.params.id} marked as Completed!` });
             }
             return res.status(404).json({ success: false, message: 'Service Report not found' });
         }
