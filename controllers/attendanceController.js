@@ -88,8 +88,13 @@ exports.checkIn = async (req, res) => {
             return res.status(400).json({ success: false, message: "Already checked in today!" });
         }
 
-        const resolvedCoords = coordinates || (latitude && longitude ? `${latitude}, ${longitude}` : '');
-        const resolvedMapUrl = mapUrl || (resolvedCoords ? `https://www.google.com/maps?q=${encodeURIComponent(resolvedCoords.replace(/\s+/g, ''))}` : '');
+        let resolvedCoords = coordinates || (latitude && longitude ? `${latitude}, ${longitude}` : '');
+        if (!resolvedCoords || resolvedCoords.trim() === '') {
+            resolvedCoords = '12.723145, 77.834120';
+        }
+        const latVal = latitude || (resolvedCoords ? parseFloat(resolvedCoords.split(',')[0].trim()) : 12.723145);
+        const lngVal = longitude || (resolvedCoords ? parseFloat(resolvedCoords.split(',')[1].trim()) : 77.834120);
+        const resolvedMapUrl = mapUrl || `https://www.google.com/maps?q=${latVal},${lngVal}`;
 
         const newAttendance = new Attendance({
             userId: new mongoose.Types.ObjectId(userId),
@@ -104,8 +109,8 @@ exports.checkIn = async (req, res) => {
             serviceId: serviceId || null,
             locationDetails: locationDetails || '',
             coordinates: resolvedCoords,
-            latitude: latitude || (resolvedCoords ? parseFloat(resolvedCoords.split(',')[0]) : null),
-            longitude: longitude || (resolvedCoords ? parseFloat(resolvedCoords.split(',')[1]) : null),
+            latitude: latVal,
+            longitude: lngVal,
             mapUrl: resolvedMapUrl
         });
 
@@ -122,7 +127,7 @@ exports.checkIn = async (req, res) => {
 exports.checkOut = async (req, res) => {
     try {
         const userId = (req.user && (req.user._id || req.user.id)) || req.body.userId;
-        const { workSummary, taskSummary, coordinates, latitude, longitude, mapUrl } = req.body; 
+        const { workSummary, taskSummary, coordinates, latitude, longitude, mapUrl, checkOutCoordinates, checkOutLatitude, checkOutLongitude, checkOutMapUrl } = req.body; 
         const { dateStr, timeStr, totalMinutes: outMins } = getIST();
         const cutoffMins = 24 * 60; 
 
@@ -147,22 +152,22 @@ exports.checkOut = async (req, res) => {
 
         const finalSummary = workSummary || taskSummary || "Session Completed";
 
-        const resolvedOutCoords = coordinates || (latitude && longitude ? `${latitude}, ${longitude}` : '');
-        const resolvedOutMapUrl = mapUrl || (resolvedOutCoords ? `https://www.google.com/maps?q=${encodeURIComponent(resolvedOutCoords.replace(/\s+/g, ''))}` : '');
+        const rawOutCoords = checkOutCoordinates || coordinates || (checkOutLatitude && checkOutLongitude ? `${checkOutLatitude}, ${checkOutLongitude}` : (latitude && longitude ? `${latitude}, ${longitude}` : ''));
+        let resolvedOutCoords = rawOutCoords || attendance.coordinates || '12.723145, 77.834120';
+        const outLat = checkOutLatitude || latitude || (resolvedOutCoords ? parseFloat(resolvedOutCoords.split(',')[0].trim()) : 12.723145);
+        const outLng = checkOutLongitude || longitude || (resolvedOutCoords ? parseFloat(resolvedOutCoords.split(',')[1].trim()) : 77.834120);
+        const resolvedOutMapUrl = checkOutMapUrl || mapUrl || `https://www.google.com/maps?q=${outLat},${outLng}`;
 
         const updateData = {
             checkOut: timeStr,
             duration: durationText,
             status: finalStatus, 
-            workSummary: finalSummary
+            workSummary: finalSummary,
+            checkOutCoordinates: resolvedOutCoords,
+            checkOutLatitude: outLat,
+            checkOutLongitude: outLng,
+            checkOutMapUrl: resolvedOutMapUrl
         };
-
-        if (resolvedOutCoords) {
-            updateData.checkOutCoordinates = resolvedOutCoords;
-            updateData.checkOutLatitude = latitude || parseFloat(resolvedOutCoords.split(',')[0]) || null;
-            updateData.checkOutLongitude = longitude || parseFloat(resolvedOutCoords.split(',')[1]) || null;
-            updateData.checkOutMapUrl = resolvedOutMapUrl;
-        }
 
         const updatedRecord = await Attendance.findByIdAndUpdate(
             attendance._id,
