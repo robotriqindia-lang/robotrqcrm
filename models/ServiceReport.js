@@ -32,7 +32,9 @@ const serviceReportSchema = new mongoose.Schema({
     
     // Engineer & Equipment Info
     engineerName: { type: String, required: true },
+    engineerNames: [{ type: String }],
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    assignedEmployees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     equipmentServiced: { type: String, default: '' },
     dateOfService: { type: String, default: '' }, // YYYY-MM-DD
     totalDaysOfService: { type: Number, default: 1 },

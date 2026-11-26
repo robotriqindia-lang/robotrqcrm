@@ -17,6 +17,7 @@ const salesLeadSchema = new mongoose.Schema({
     enquiryDate: { type: Date, default: Date.now },
     type: { type: String, enum: ['service', 'material', 'project', 'panel'] },
     assignedEmployee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    assignedEmployees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     billNo: { type: String, trim: true, default: '' },
     billAmount: { type: Number, default: 0 },
     advancePayment: { type: Number, default: 0 },

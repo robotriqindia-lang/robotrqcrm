@@ -64,11 +64,11 @@ const getUnifiedServices = async () => {
     // 1. Fetch all SalesLeads of type 'service' or 'project'
     const leads = await SalesLead.find({ 
         type: { $in: ['service', 'project'] } 
-    }).populate('assignedEmployee customer').lean();
+    }).populate('assignedEmployee customer assignedEmployees').lean();
 
     // 2. Fetch all ServiceReports
     const reports = await ServiceReport.find()
-        .populate('assignedTo customerId')
+        .populate('assignedTo customerId assignedEmployees')
         .lean();
 
     // Index reports by leadId, enquiryId, and customer+machine
@@ -116,8 +116,10 @@ const getUnifiedServices = async () => {
             projectScope: report?.projectScope || lead.application || '',
             locationAddress: report?.locationAddress || (typeof lead.customer === 'object' ? lead.customer?.address : '') || '',
             enquiryDetails: lead.enquiryDetails || '',
-            engineerName: report?.engineerName || lead.assignedEmployee?.fullName || '',
-            assignedTo: report?.assignedTo?._id || report?.assignedTo || lead.assignedEmployee?._id || lead.assignedEmployee || null,
+            engineerName: report?.engineerName || (Array.isArray(lead.assignedEmployees) && lead.assignedEmployees.length > 0 ? lead.assignedEmployees.map(e => e?.fullName || e?.userName).filter(Boolean).join(', ') : lead.assignedEmployee?.fullName || ''),
+            engineerNames: report?.engineerNames || (Array.isArray(lead.assignedEmployees) ? lead.assignedEmployees.map(e => e?.fullName || e?.userName).filter(Boolean) : (lead.assignedEmployee?.fullName ? [lead.assignedEmployee.fullName] : [])),
+            assignedTo: report?.assignedTo?._id || report?.assignedTo || lead.assignedEmployee?._id || lead.assignedEmployee || (Array.isArray(lead.assignedEmployees) && lead.assignedEmployees[0]?._id ? lead.assignedEmployees[0]._id : null),
+            assignedEmployees: report?.assignedEmployees || lead.assignedEmployees || (lead.assignedEmployee ? [lead.assignedEmployee] : []),
             priority: lead.priority || report?.priority || 'Medium',
             dateOfService: report?.dateOfService || (lead.enquiryDate ? new Date(lead.enquiryDate).toISOString().split('T')[0] : ''),
             status: displayStatus,
@@ -351,7 +353,9 @@ router.post('/create-work', async (req, res) => {
             locationAddress,
             enquiryDetails,
             assignedEmployee,
+            assignedEmployees,
             engineerName,
+            engineerNames,
             priority = 'Medium',
             targetDate,
             status = 'Work in Progress'
@@ -362,6 +366,11 @@ router.post('/create-work', async (req, res) => {
         }
 
         const nextEnqId = await generateNextEnquiryId();
+
+        const resolvedAssignedEmployees = Array.isArray(assignedEmployees) && assignedEmployees.length > 0
+            ? assignedEmployees
+            : (assignedEmployee ? [assignedEmployee] : []);
+        const primaryAssigned = assignedEmployee || (resolvedAssignedEmployees[0] || null);
 
         // 1. Create SalesLead record as the master enquiry
         const leadPayload = {
@@ -374,7 +383,8 @@ router.post('/create-work', async (req, res) => {
             application: machineName || projectScope || (workType === 'project' ? 'Automation Project' : 'Technical Service'),
             enquiryDetails: enquiryDetails || '',
             type: workType,
-            assignedEmployee: assignedEmployee || null,
+            assignedEmployee: primaryAssigned,
+            assignedEmployees: resolvedAssignedEmployees,
             priority: priority,
             status: status,
             enquiryDate: new Date()

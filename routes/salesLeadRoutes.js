@@ -74,7 +74,11 @@ const syncCustomerSaleData = async (lead, saleData) => {
 // 1. Get all leads
 router.get('/', async (req, res) => {
     try {
-        const leads = await SalesLead.find().populate('customer').sort({ createdAt: -1 });
+        const leads = await SalesLead.find()
+            .populate('customer')
+            .populate('assignedEmployee')
+            .populate('assignedEmployees')
+            .sort({ createdAt: -1 });
         res.status(200).json({ success: true, data: leads });
     } catch (error) {
         res.status(500).json({ success: false, message: "Error fetching leads" });
@@ -98,7 +102,11 @@ router.post('/', async (req, res) => {
         }
         const nextId = `ENQ-${nextIdNumber.toString().padStart(3, '0')}`;
         
-        if (!req.body.assignedEmployee) delete req.body.assignedEmployee;
+        if (Array.isArray(req.body.assignedEmployees) && req.body.assignedEmployees.length > 0) {
+            req.body.assignedEmployee = req.body.assignedEmployee || req.body.assignedEmployees[0];
+        } else if (!req.body.assignedEmployee) {
+            delete req.body.assignedEmployee;
+        }
         if (req.body.fullPayment !== undefined || req.body.billAmount !== undefined) {
             const bill = Number(req.body.fullPayment !== undefined ? req.body.fullPayment : req.body.billAmount) || 0;
             const adv = Number(req.body.advancePayment !== undefined ? req.body.advancePayment : 0) || 0;
@@ -129,7 +137,11 @@ router.post('/', async (req, res) => {
 // 3. Update lead (e.g., status update)
 router.put('/:id', async (req, res) => {
     try {
-        if (!req.body.assignedEmployee) delete req.body.assignedEmployee;
+        if (Array.isArray(req.body.assignedEmployees) && req.body.assignedEmployees.length > 0) {
+            req.body.assignedEmployee = req.body.assignedEmployee || req.body.assignedEmployees[0];
+        } else if (req.body.assignedEmployee === '') {
+            req.body.assignedEmployee = null;
+        }
         if (req.body.fullPayment !== undefined || req.body.billAmount !== undefined) {
             const bill = Number(req.body.fullPayment !== undefined ? req.body.fullPayment : req.body.billAmount) || 0;
             const adv = Number(req.body.advancePayment !== undefined ? req.body.advancePayment : 0) || 0;
