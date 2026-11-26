@@ -23,7 +23,7 @@ router.post('/', async (req, res) => {
         const newBOM = await BOM.create(req.body);
         // Automatically update lead status
         if(req.body.lead) {
-            await SalesLead.findByIdAndUpdate(req.body.lead, { status: 'BOM created' });
+            await SalesLead.findByIdAndUpdate(req.body.lead, { status: 'BOM Created' });
         }
         res.status(201).json({ success: true, data: newBOM });
     } catch (error) {
