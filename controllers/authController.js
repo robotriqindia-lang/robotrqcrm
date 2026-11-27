@@ -107,12 +107,14 @@ exports.login = async (req, res) => {
         // 🚀 MASTER FIX: Case-Insensitive Search (Regex பயன்படுத்தி பெரிய/சின்ன எழுத்துக்களைக் கையாள்கிறோம்)
         const keyRegex = new RegExp(`^${loginKey}$`, 'i');
 
-        // மின்னஞ்சல், மாணவர் ஐடி அல்லது ஊழியர் ஐடி எதில் மேட்ச் ஆனாலும் லாகின் ஆகும்
+        // மின்னஞ்சல், மாணவர் ஐடி, ஊழியர் ஐடி அல்லது பயனர் பெயர் எதில் மேட்ச் ஆனாலும் லாகின் ஆகும்
         const user = await User.findOne({ 
             $or: [
                 { email: keyRegex },
                 { studentId: keyRegex },
-                { empId: keyRegex } 
+                { empId: keyRegex },
+                { userName: keyRegex },
+                { fullName: keyRegex }
             ]
         });
 
