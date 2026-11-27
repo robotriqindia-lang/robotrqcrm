@@ -61,9 +61,13 @@ const isInProgressStatus = (statusStr) => {
 
 // Core Helper: Aggregate & unify Service & Project Enquiries with ServiceReports
 const getUnifiedServices = async () => {
-    // 1. Fetch all SalesLeads of type 'service' or 'project'
+    // 1. Fetch all SalesLeads of type 'service' or 'project' (or assigned to employees)
     const leads = await SalesLead.find({ 
-        type: { $in: ['service', 'project'] } 
+        $or: [
+            { type: { $in: ['service', 'project', 'Service', 'Project'] } },
+            { assignedEmployee: { $exists: true, $ne: null } },
+            { 'assignedEmployees.0': { $exists: true } }
+        ]
     }).populate('assignedEmployee customer assignedEmployees').lean();
 
     // 2. Fetch all ServiceReports
@@ -96,7 +100,8 @@ const getUnifiedServices = async () => {
         const rawStatus = report?.status || lead.status || 'New';
         const isCompleted = isCompletedStatus(rawStatus);
         const isInProgress = isInProgressStatus(rawStatus);
-        const resolvedCategory = isCompleted ? 'completed' : (isInProgress ? 'active' : 'pending');
+        // All service/project enquiries that are not yet marked completed are considered active works
+        const resolvedCategory = isCompleted ? 'completed' : 'active';
         const displayStatus = rawStatus;
 
         unified.push({
@@ -151,7 +156,7 @@ const getUnifiedServices = async () => {
             const rawStatus = report.status || 'Work in Progress';
             const isCompleted = isCompletedStatus(rawStatus);
             const isInProgress = isInProgressStatus(rawStatus);
-            const resolvedCategory = isCompleted ? 'completed' : (isInProgress ? 'active' : 'pending');
+            const resolvedCategory = isCompleted ? 'completed' : 'active';
             const fallbackEnquiryId = report.enquiryId || `ENQ-SRV-${report.reportNo.split('/').pop() || '001'}`;
 
             unified.push({
@@ -645,18 +650,44 @@ router.patch('/:id/complete', async (req, res) => {
         }
 
         if (!updated) {
-            // Also check if id is a SalesLead id or enquiryId
+            // Check if id is a SalesLead id or enquiryId
             let lead = null;
             if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-                lead = await SalesLead.findByIdAndUpdate(req.params.id, { status: 'Work Completed' }, { new: true });
+                lead = await SalesLead.findById(req.params.id);
             }
             if (!lead) {
-                lead = await SalesLead.findOneAndUpdate({ enquiryId: req.params.id }, { status: 'Work Completed' }, { new: true });
+                lead = await SalesLead.findOne({ enquiryId: req.params.id });
             }
             if (lead) {
-                return res.json({ success: true, message: `Work ${lead.enquiryId || req.params.id} marked as Completed!` });
+                await SalesLead.findByIdAndUpdate(lead._id, { status: 'Work Completed' });
+                // Create a completed ServiceReport so history and TSR exist
+                const nextReportNo = await generateNextReportNo();
+                updated = await ServiceReport.create({
+                    reportNo: nextReportNo,
+                    enquiryId: lead.enquiryId || '',
+                    leadId: lead._id,
+                    workType: lead.type || 'service',
+                    customer: lead.companyName || lead.customerName || 'Customer',
+                    customerId: lead.customer,
+                    machineName: lead.application || '',
+                    equipmentServiced: lead.application || '',
+                    projectScope: lead.application || '',
+                    engineerName: completedBy || 'Service Engineer',
+                    assignedTo: lead.assignedEmployee,
+                    assignedEmployees: lead.assignedEmployees,
+                    status: 'Completed',
+                    dateOfService: updateFields.dateOfService,
+                    typeOfServicePerformed: updateFields.typeOfServicePerformed || '',
+                    partsRepairedOrReplaced: updateFields.partsRepairedOrReplaced || '',
+                    additionalServicePerformed: updateFields.additionalServicePerformed || '',
+                    rootCauseRecommendations: updateFields.rootCauseRecommendations || '',
+                    customerComments: updateFields.customerComments || '',
+                    totalServiceHours: updateFields.totalServiceHours || '1',
+                    minePowerRep: { name: completedBy || '', date: updateFields.dateOfService }
+                });
+                return res.json({ success: true, data: updated, message: `Report ${nextReportNo} generated and work ${lead.enquiryId || req.params.id} marked as Completed!` });
             }
-            return res.status(404).json({ success: false, message: 'Service Report not found' });
+            return res.status(404).json({ success: false, message: 'Service Report or Enquiry not found' });
         }
 
         if (updated.leadId) {
