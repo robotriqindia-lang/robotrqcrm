@@ -603,8 +603,8 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// PATCH: Mark a service report as completed by employee
-router.patch('/:id/complete', async (req, res) => {
+// PATCH & POST: Mark a service report as completed by employee
+const completeServiceHandler = async (req, res) => {
     try {
         const { 
             typeOfServicePerformed, 
@@ -698,10 +698,13 @@ router.patch('/:id/complete', async (req, res) => {
 
         res.json({ success: true, data: updated, message: `Service Report ${updated.reportNo} marked as Completed!` });
     } catch (err) {
-        console.error("PATCH Complete Service Error:", err);
+        console.error("Complete Service Error:", err);
         res.status(500).json({ success: false, message: err.message });
     }
-});
+};
+
+router.patch('/:id/complete', completeServiceHandler);
+router.post('/:id/complete', completeServiceHandler);
 
 // PATCH: Update status of a work item / service / lead
 router.patch('/:id/status', async (req, res) => {

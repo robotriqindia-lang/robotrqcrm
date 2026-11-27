@@ -13,7 +13,7 @@ app.use(cors({
   origin: function (origin, callback) {
     callback(null, true); // Allow anywhere
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
