@@ -2,8 +2,18 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 
-// Multer Setup
-const upload = multer({ storage: multer.memoryStorage() });
+// Multer Setup supporting photo, certificate, and resume
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+const uploadEmployeeDocs = upload.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'certificate', maxCount: 1 },
+    { name: 'certificates', maxCount: 1 },
+    { name: 'resume', maxCount: 1 }
+]);
 
 // Import controller functions
 const { 
@@ -21,13 +31,13 @@ const {
 const { protect } = require('../middleware/authMiddleware');
 
 // --- 1. Public Routes ---
-router.post('/register', upload.single('photo'), register);
+router.post('/register', uploadEmployeeDocs, register);
 router.post('/login', login);
 
 // --- 2. Protected Routes ---
 router.post('/logout', protect, logout);
 router.get('/user/:id', protect, getUserById);
-router.put('/user/:id', protect, upload.single('photo'), updateUser);
+router.put('/user/:id', protect, uploadEmployeeDocs, updateUser);
 router.put('/user/:id/password', protect, updatePassword);
 
 // --- 3. Admin Data Routes ---

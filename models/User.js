@@ -22,9 +22,15 @@ const userSchema = new mongoose.Schema({
     // --- Common Fields ---
     fullName: { type: String, required: true },
     phone: { type: String },
+    emergencyPhone: { type: String },
+    emergencyContact: { type: String },
     dob: { type: String },
     photo: { type: String }, // போட்டோ பாத் (Path) சேமிக்க
     profileImage: { type: String },
+    certificate: { type: String }, // Base64 or URL
+    certificateName: { type: String },
+    resume: { type: String }, // Base64 or URL
+    resumeName: { type: String },
 
     // --- Student Fields ---
     studentId: { type: String }, 

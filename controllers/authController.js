@@ -12,13 +12,33 @@ exports.register = async (req, res) => {
         joiningDate, endingDate, courseJoiningDate, courseEndDate, 
         fees, level, collegeOrCompany, preferredType,
         designation, aadharNumber, dateOfJoining, bankName, accNumber, ifscCode,
-        salary, perDaySalary, empId, panNumber
+        salary, perDaySalary, empId, panNumber, phone, emergencyPhone, emergencyContact
     } = req.body; 
 
     try {
-        // Handle photo upload
+        // Handle photo and documents upload
         let photoUrl = req.body.photo || null;
-        if (req.file) {
+        let certificateUrl = req.body.certificate || null;
+        let certificateName = req.body.certificateName || '';
+        let resumeUrl = req.body.resume || null;
+        let resumeName = req.body.resumeName || '';
+
+        if (req.files) {
+            if (req.files['photo'] && req.files['photo'][0]) {
+                const f = req.files['photo'][0];
+                photoUrl = `data:${f.mimetype};base64,${f.buffer.toString('base64')}`;
+            }
+            const certFile = (req.files['certificate'] && req.files['certificate'][0]) || (req.files['certificates'] && req.files['certificates'][0]);
+            if (certFile) {
+                certificateUrl = `data:${certFile.mimetype};base64,${certFile.buffer.toString('base64')}`;
+                certificateName = certFile.originalname;
+            }
+            if (req.files['resume'] && req.files['resume'][0]) {
+                const f = req.files['resume'][0];
+                resumeUrl = `data:${f.mimetype};base64,${f.buffer.toString('base64')}`;
+                resumeName = f.originalname;
+            }
+        } else if (req.file) {
             photoUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
         }
 
@@ -62,6 +82,13 @@ exports.register = async (req, res) => {
             preferredType,
             photo: photoUrl,
             profileImage: photoUrl,
+            phone: phone || '',
+            emergencyPhone: emergencyPhone || emergencyContact || '',
+            emergencyContact: emergencyContact || emergencyPhone || '',
+            certificate: certificateUrl,
+            certificateName: certificateName,
+            resume: resumeUrl,
+            resumeName: resumeName,
             empId,
             designation, 
             panNumber, 
@@ -207,10 +234,33 @@ exports.updateUser = async (req, res) => {
             req.body.salary = req.body.perDaySalary;
         }
 
-        if (req.file) {
+        if (req.files) {
+            if (req.files['photo'] && req.files['photo'][0]) {
+                const f = req.files['photo'][0];
+                const photoUrl = `data:${f.mimetype};base64,${f.buffer.toString('base64')}`;
+                req.body.photo = photoUrl;
+                req.body.profileImage = photoUrl;
+            }
+            const certFile = (req.files['certificate'] && req.files['certificate'][0]) || (req.files['certificates'] && req.files['certificates'][0]);
+            if (certFile) {
+                req.body.certificate = `data:${certFile.mimetype};base64,${certFile.buffer.toString('base64')}`;
+                req.body.certificateName = certFile.originalname;
+            }
+            if (req.files['resume'] && req.files['resume'][0]) {
+                const f = req.files['resume'][0];
+                req.body.resume = `data:${f.mimetype};base64,${f.buffer.toString('base64')}`;
+                req.body.resumeName = f.originalname;
+            }
+        } else if (req.file) {
             const photoUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
             req.body.photo = photoUrl;
             req.body.profileImage = photoUrl;
+        }
+
+        if (req.body.emergencyPhone) {
+            req.body.emergencyContact = req.body.emergencyPhone;
+        } else if (req.body.emergencyContact) {
+            req.body.emergencyPhone = req.body.emergencyContact;
         }
 
         if (req.body.joiningDate) {
