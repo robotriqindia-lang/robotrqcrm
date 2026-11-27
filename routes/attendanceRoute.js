@@ -106,7 +106,11 @@ router.post('/check-in', async (req, res) => {
       locationName = 'Main Office', 
       customerId = null, 
       serviceId = null, 
-      locationDetails = '' 
+      locationDetails = '',
+      coordinates = '',
+      latitude = null,
+      longitude = null,
+      mapUrl = ''
     } = req.body;
     const user = await User.findById(userId);
     const { dateIST: today, timeIST: nowTime } = getIST();
@@ -117,6 +121,11 @@ router.post('/check-in', async (req, res) => {
     // Validate ObjectIds if passed
     const safeCustomerId = customerId && mongoose.Types.ObjectId.isValid(customerId) ? customerId : null;
     const safeServiceId = serviceId && mongoose.Types.ObjectId.isValid(serviceId) ? serviceId : null;
+
+    const resolvedCoords = coordinates || (latitude && longitude ? `${latitude}, ${longitude}` : '');
+    const latVal = latitude || (resolvedCoords && resolvedCoords.includes(',') ? parseFloat(resolvedCoords.split(',')[0].trim()) : null);
+    const lngVal = longitude || (resolvedCoords && resolvedCoords.includes(',') ? parseFloat(resolvedCoords.split(',')[1].trim()) : null);
+    const resolvedMapUrl = mapUrl || (latVal && lngVal ? `https://www.google.com/maps?q=${latVal},${lngVal}` : '');
 
     const newLog = new Attendance({
       userId,
@@ -129,7 +138,11 @@ router.post('/check-in', async (req, res) => {
       locationName: locationName || 'Main Office',
       customerId: safeCustomerId,
       serviceId: safeServiceId,
-      locationDetails: locationDetails || ''
+      locationDetails: locationDetails || '',
+      coordinates: resolvedCoords,
+      latitude: latVal,
+      longitude: lngVal,
+      mapUrl: resolvedMapUrl
     });
 
     await newLog.save();
@@ -138,7 +151,9 @@ router.post('/check-in', async (req, res) => {
       message: `Checked-In Successfully at ${locationName || 'Office'}!`, 
       time: nowTime,
       locationType,
-      locationName: locationName || 'Main Office'
+      locationName: locationName || 'Main Office',
+      coordinates: resolvedCoords,
+      mapUrl: resolvedMapUrl
     });
   } catch (error) {
     console.error("Check-in error:", error);
@@ -151,7 +166,18 @@ router.post('/check-in', async (req, res) => {
 // ===============================
 router.post('/check-out', async (req, res) => {
   try {
-    const { userId, workSummary } = req.body;
+    const { 
+      userId, 
+      workSummary,
+      checkOutCoordinates,
+      checkOutLatitude,
+      checkOutLongitude,
+      checkOutMapUrl,
+      coordinates,
+      latitude,
+      longitude,
+      mapUrl
+    } = req.body;
     const { dateIST: today, timeIST: outTimeStr, totalMinutes: outMins } = getIST();
     const cutoffMins = 1440;
 
@@ -172,17 +198,60 @@ router.post('/check-out', async (req, res) => {
     else if (diffHrs >= 4) finalStatus = "Halfday";
     else finalStatus = "Absent";
 
+    const outCoords = checkOutCoordinates || coordinates || (checkOutLatitude && checkOutLongitude ? `${checkOutLatitude}, ${checkOutLongitude}` : (latitude && longitude ? `${latitude}, ${longitude}` : ''));
+    const outLat = checkOutLatitude || latitude || (outCoords && outCoords.includes(',') ? parseFloat(outCoords.split(',')[0].trim()) : null);
+    const outLng = checkOutLongitude || longitude || (outCoords && outCoords.includes(',') ? parseFloat(outCoords.split(',')[1].trim()) : null);
+    const outMap = checkOutMapUrl || mapUrl || (outLat && outLng ? `https://www.google.com/maps?q=${outLat},${outLng}` : '');
+
     lastLog.checkOut = outTimeStr;
     lastLog.duration = `${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
     lastLog.status = finalStatus;
     lastLog.workSummary = workSummary || "Completed Session";
+    if (outCoords) lastLog.checkOutCoordinates = outCoords;
+    if (outLat) lastLog.checkOutLatitude = outLat;
+    if (outLng) lastLog.checkOutLongitude = outLng;
+    if (outMap) lastLog.checkOutMapUrl = outMap;
 
     await lastLog.save();
 
-    res.status(200).json({ success: true, message: `Status: ${finalStatus}`, time: outTimeStr });
+    res.status(200).json({ 
+      success: true, 
+      message: `Status: ${finalStatus}`, 
+      time: outTimeStr,
+      checkOutCoordinates: outCoords,
+      checkOutMapUrl: outMap
+    });
   } catch (error) {
     console.error("Checkout Route Error:", error);
     res.status(500).json({ success: false, message: 'Server Error' });
+  }
+});
+
+// ===============================
+// 4B. IP LOCATION FALLBACK
+// ===============================
+router.get('/ip-location', async (req, res) => {
+  try {
+    const rawIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '';
+    if (!rawIp || rawIp === '127.0.0.1' || rawIp === '::1' || rawIp.startsWith('192.168.') || rawIp.startsWith('10.')) {
+      return res.json({ success: true, isLocal: true });
+    }
+    const ipRes = await fetch(`https://ipwho.is/${rawIp}`);
+    if (ipRes.ok) {
+      const data = await ipRes.json();
+      if (data.success && data.latitude && data.longitude) {
+        return res.json({
+          success: true,
+          latitude: Number(Number(data.latitude).toFixed(6)),
+          longitude: Number(Number(data.longitude).toFixed(6)),
+          coordinates: `${Number(data.latitude).toFixed(6)}, ${Number(data.longitude).toFixed(6)}`,
+          mapUrl: `https://www.google.com/maps?q=${data.latitude},${data.longitude}`
+        });
+      }
+    }
+    res.json({ success: false });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
   }
 });
 
