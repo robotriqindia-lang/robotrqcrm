@@ -236,6 +236,15 @@ exports.updateUser = async (req, res) => {
             req.body.salary = Number(req.body.perDaySalary);
         }
 
+        // 🔑 Password update: if admin sets new password, hash it; otherwise leave existing password untouched
+        if (req.body.password && String(req.body.password).trim() !== '') {
+            const salt = await bcrypt.genSalt(10);
+            req.body.password = await bcrypt.hash(String(req.body.password).trim(), salt);
+        } else {
+            delete req.body.password;
+        }
+        delete req.body.newPassword;
+
         const updatedUser = await User.findOneAndUpdate(query, req.body, { returnDocument: 'after' }).select('-password');
         if (!updatedUser) return res.status(404).json({ success: false, message: "User not found" });
         
