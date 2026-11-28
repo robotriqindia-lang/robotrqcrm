@@ -126,6 +126,7 @@ router.post('/check-in', async (req, res) => {
     const latVal = latitude || (resolvedCoords && resolvedCoords.includes(',') ? parseFloat(resolvedCoords.split(',')[0].trim()) : null);
     const lngVal = longitude || (resolvedCoords && resolvedCoords.includes(',') ? parseFloat(resolvedCoords.split(',')[1].trim()) : null);
     const resolvedMapUrl = mapUrl || (latVal && lngVal ? `https://www.google.com/maps?q=${latVal},${lngVal}` : '');
+    const normalizedLocType = (locationType === 'enquiry' || locationType === 'project') ? 'service' : (locationType || 'office');
 
     const newLog = new Attendance({
       userId,
@@ -134,7 +135,7 @@ router.post('/check-in', async (req, res) => {
       date: today,
       checkIn: nowTime,
       status: 'In Office',
-      locationType,
+      locationType: normalizedLocType,
       locationName: locationName || 'Main Office',
       customerId: safeCustomerId,
       serviceId: safeServiceId,

@@ -5,7 +5,7 @@ const serviceReportSchema = new mongoose.Schema({
     workAuthNo: { type: String, default: '' },
     enquiryId: { type: String, default: '' }, // e.g. ENQ-030
     leadId: { type: mongoose.Schema.Types.ObjectId, ref: 'SalesLead' },
-    workType: { type: String, enum: ['service', 'project'], default: 'service' },
+    workType: { type: String, default: 'service' },
     projectScope: { type: String, default: '' },
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     targetDate: { type: String, default: '' },
@@ -13,6 +13,7 @@ const serviceReportSchema = new mongoose.Schema({
     // Customer & Machine Info
     customer: { type: String, required: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+    phone: { type: String, default: '' },
     locationAddress: { type: String, default: '' },
     machineName: { type: String, default: '' },
     callByAndDate: { type: String, default: '' },
@@ -35,6 +36,7 @@ const serviceReportSchema = new mongoose.Schema({
     engineerNames: [{ type: String }],
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     assignedEmployees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    assignedDate: { type: Date, default: Date.now },
     equipmentServiced: { type: String, default: '' },
     dateOfService: { type: String, default: '' }, // YYYY-MM-DD
     totalDaysOfService: { type: Number, default: 1 },

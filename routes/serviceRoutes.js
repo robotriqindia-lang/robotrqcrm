@@ -125,6 +125,7 @@ const getUnifiedServices = async () => {
             engineerNames: report?.engineerNames || (Array.isArray(lead.assignedEmployees) ? lead.assignedEmployees.map(e => e?.fullName || e?.userName).filter(Boolean) : (lead.assignedEmployee?.fullName ? [lead.assignedEmployee.fullName] : [])),
             assignedTo: report?.assignedTo?._id || report?.assignedTo || lead.assignedEmployee?._id || lead.assignedEmployee || (Array.isArray(lead.assignedEmployees) && lead.assignedEmployees[0]?._id ? lead.assignedEmployees[0]._id : null),
             assignedEmployees: report?.assignedEmployees || lead.assignedEmployees || (lead.assignedEmployee ? [lead.assignedEmployee] : []),
+            assignedDate: report?.assignedDate || lead.assignedDate || lead.enquiryDate || null,
             priority: lead.priority || report?.priority || 'Medium',
             dateOfService: report?.dateOfService || (lead.enquiryDate ? new Date(lead.enquiryDate).toISOString().split('T')[0] : ''),
             status: displayStatus,
@@ -363,6 +364,7 @@ router.post('/create-work', async (req, res) => {
             engineerNames,
             priority = 'Medium',
             targetDate,
+            assignedDate,
             status = 'Work in Progress'
         } = req.body;
 
@@ -392,6 +394,7 @@ router.post('/create-work', async (req, res) => {
             assignedEmployees: resolvedAssignedEmployees,
             priority: priority,
             status: status,
+            assignedDate: assignedDate ? new Date(assignedDate) : new Date(),
             enquiryDate: new Date()
         };
 
@@ -446,6 +449,7 @@ router.post('/', async (req, res) => {
             projectScope,
             customer,
             customerId,
+            phone,
             locationAddress,
             machineName,
             callByAndDate,
@@ -501,21 +505,33 @@ router.post('/', async (req, res) => {
             totalServiceHours = String(Math.round(sum * 10) / 10);
         }
 
+        // Sanitize ObjectId fields to prevent CastError
+        const toObjectIdOrNull = (val) => {
+            if (!val) return null;
+            if (typeof val === 'object' && val._id) val = val._id;
+            const str = String(val).trim();
+            if (mongoose.Types.ObjectId.isValid(str) && String(new mongoose.Types.ObjectId(str)) === str) {
+                return new mongoose.Types.ObjectId(str);
+            }
+            return null;
+        };
+
         const newReport = new ServiceReport({
             reportNo: reportNo.trim(),
             workAuthNo: workAuthNo || '',
             enquiryId: enquiryId || '',
-            leadId: leadId || null,
+            leadId: toObjectIdOrNull(leadId),
             workType: workType || 'service',
             projectScope: projectScope || '',
             customer: customer.trim(),
-            customerId: customerId || null,
+            customerId: toObjectIdOrNull(customerId),
+            phone: phone || '',
             locationAddress: locationAddress || '',
             machineName: machineName || '',
             callByAndDate: callByAndDate || '',
             serviceTypes: serviceTypes || {},
             engineerName: engineerName.trim(),
-            assignedTo: assignedTo || null,
+            assignedTo: toObjectIdOrNull(assignedTo),
             equipmentServiced: equipmentServiced || '',
             dateOfService: dateOfService || new Date().toISOString().split('T')[0],
             totalDaysOfService: Number(totalDaysOfService) || 1,
@@ -544,7 +560,7 @@ router.post('/', async (req, res) => {
                 signature: ''
             },
             customData: customData || {},
-            createdBy: createdBy || null
+            createdBy: toObjectIdOrNull(createdBy)
         });
 
         const savedReport = await newReport.save();
@@ -567,6 +583,21 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const updateData = { ...req.body };
+
+        const toObjectIdOrNull = (val) => {
+            if (!val) return null;
+            if (typeof val === 'object' && val._id) val = val._id;
+            const str = String(val).trim();
+            if (mongoose.Types.ObjectId.isValid(str) && String(new mongoose.Types.ObjectId(str)) === str) {
+                return new mongoose.Types.ObjectId(str);
+            }
+            return null;
+        };
+
+        if ('customerId' in updateData) updateData.customerId = toObjectIdOrNull(updateData.customerId);
+        if ('leadId' in updateData) updateData.leadId = toObjectIdOrNull(updateData.leadId);
+        if ('assignedTo' in updateData) updateData.assignedTo = toObjectIdOrNull(updateData.assignedTo);
+        if ('createdBy' in updateData) updateData.createdBy = toObjectIdOrNull(updateData.createdBy);
         
         // Calculate total service hours if logs provided
         if (Array.isArray(updateData.serviceLogs)) {
@@ -580,7 +611,7 @@ router.put('/:id', async (req, res) => {
         const updatedReport = await ServiceReport.findByIdAndUpdate(
             req.params.id,
             { $set: updateData },
-            { new: true, runValidators: true }
+            { new: true, runValidators: false }
         );
 
         if (!updatedReport) {

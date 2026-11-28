@@ -93,6 +93,7 @@ const robotriqLeadRoutes = require('./routes/robotriqLeadRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const settingRoutes = require('./routes/settingRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 
 
 // ==========================================
@@ -125,6 +126,7 @@ app.use('/api/robotriq-leads', robotriqLeadRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/chat', chatRoutes);
 
 
 // ==========================================

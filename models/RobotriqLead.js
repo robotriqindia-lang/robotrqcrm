@@ -60,6 +60,17 @@ const robotriqLeadSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User' 
     },
+    assignedEmployees: [{ 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'User' 
+    }],
+    assignedDate: { 
+        type: Date, 
+        default: Date.now 
+    },
+    targetDate: { 
+        type: Date 
+    },
     billNo: {
         type: String,
         trim: true,

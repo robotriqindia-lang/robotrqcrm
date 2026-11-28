@@ -96,6 +96,8 @@ exports.checkIn = async (req, res) => {
         const lngVal = longitude || (resolvedCoords ? parseFloat(resolvedCoords.split(',')[1].trim()) : 77.834120);
         const resolvedMapUrl = mapUrl || `https://www.google.com/maps?q=${latVal},${lngVal}`;
 
+        const normalizedLocType = (locationType === 'enquiry' || locationType === 'project') ? 'service' : (locationType || 'office');
+
         const newAttendance = new Attendance({
             userId: new mongoose.Types.ObjectId(userId),
             userName: fullName,
@@ -103,7 +105,7 @@ exports.checkIn = async (req, res) => {
             date: dateStr,
             checkIn: timeStr,
             status: "In Office",
-            locationType: locationType || 'office',
+            locationType: normalizedLocType,
             locationName: locationName || 'Main Office',
             customerId: customerId || null,
             serviceId: serviceId || null,

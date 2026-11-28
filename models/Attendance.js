@@ -44,7 +44,6 @@ const AttendanceSchema = new mongoose.Schema({
     },
     locationType: {
         type: String,
-        enum: ['office', 'customer', 'service', 'enquiry', 'other'],
         default: 'office'
     },
     locationName: {
